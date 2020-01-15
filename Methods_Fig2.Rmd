@@ -1,0 +1,114 @@
+---
+title: "Methods_Fig2"
+author: "Sarah Odell"
+date: "12/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Methods Figure 2
+
+
+```{r}
+library('data.table')
+library('ggplot2')
+library('cowplot')
+library('imager')
+library('dplyr')
+library('tibble')
+library('GridLMM')
+```
+
+```{r}
+# Read in kinship matrix
+K=fread('GridLMM_011619/K_matrix_012319.txt',data.table=F)
+rownames(K) = K[,1]
+K = as.matrix(K[,-1])
+colnames(K) = rownames(K)
+
+# Read in phenotypes
+phenotypes=fread('biogemma/phenotypes.csv',data.table=F)
+phenotypes$Genotype_code=gsub('-','.',phenotypes$Genotype_code)
+phenotypes <- phenotypes[phenotypes$Genotype_code %in% rownames(K),]
+env="BLOIS_2014_OPT"
+p=c('male_flowering_d6','female_flowering_d6','tkw_15','grain_yield_15','harvest_grain_moisture','total_plant_height')
+pheno=phenotypes[phenotypes$Loc.Year.Treat==env,c('Genotype_code',p)]
+
+sd_scaled <- function(x){
+  return((x - mean(x))/sd(x))
+}
+pheno_scaled = as.data.frame(apply(pheno[,p],MARGIN=2,FUN=sd_scaled),stringsAsFactors = F)
+pheno_scaled$Genotype_code = pheno$Genotype_code
+
+pheno_m = melt(pheno_scaled,'Genotype_code')
+
+```
+
+2A
+
+```{r}
+theme_set(theme_classic())
+theme_update(text=element_text(family="Times"))
+theme_update(plot.caption = element_text(hjust = 0))
+theme_update(plot.title = element_text(size=12),axis.title=element_text(size=12))
+theme_update(panel.background=element_blank())
+theme_update(plot.caption=element_text(size=12))
+a<-ggplot(pheno_m,aes(x=value,color=variable,fill=variable)) + geom_density() + facet_grid(variable~.) + theme_classic() + theme(strip.text.y = element_blank()) + guides(color=F) + scale_fill_discrete(name="Phenotype",labels=c("Days to Anthesis","Days to Silking","Thousand Kernel Weight","Grain Yield","Grain Moisture","Plant Height")) + xlab("Value") + ylab("Density")
+a
+```
+
+
+Calculate heritabilities of each phenotype in selected environment
+```{r}
+
+h2s=c()
+for(i in p){
+  data=pheno[,c('Genotype_code',i)]
+  names(data)=c('ID','y')
+  null_model = GridLMM_ML(y~1+ (1|ID),data,relmat = list(ID = K),ML = T,REML=F,verbose=F) #(1|ID) + 
+  h2_start = null_model$results[,grepl('.ML',colnames(null_model$results),fixed=T),drop=FALSE]
+  names(h2_start) = sapply(names(h2_start),function(x) strsplit(x,'.',fixed=T)[[1]][1])
+  h2s=c(h2s,h2_start[[1]])
+}
+h2_data = data.frame(phenotype=p,h2=h2s,stringsAsFactors = F)
+```
+
+2B
+```{r}
+b<- h2_data %>% mutate(phenotype=factor(phenotype,levels=rev(p))) %>% ggplot(aes(x=phenotype,y=h2,fill=phenotype_f)) + geom_bar(stat="identity",position="dodge") + coord_flip() + geom_text(aes(label=round(h2,2)), position=position_dodge(width=0.9), vjust=-0.25) + xlab("Heritability") + ylab("Phenotype") + theme_classic() + theme(strip.text.y = element_blank(),axis.text.y = element_blank())
+
+b
+```
+
+
+Plot grid
+```{r}
+legend <- get_legend(
+  # create some space to the left of the legend
+  a + theme(legend.box.margin = margin(0, 0, 0, 12),legend.position = c(-0.1,0.42),legend.title = element_text(size =14),
+  legend.text = element_text(size = 12))
+)
+
+prow <- plot_grid(
+  a + theme_classic() + theme(legend.position="none",strip.text.y = element_blank()),
+  b + theme_classic() +theme(legend.position="none",axis.text.y = element_blank()),
+labels = c("A", "B"),
+rel_widths = c(5,4),
+  hjust = -1,
+  nrow = 1,
+  ncol=2
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+plot_grid(prow, legend, rel_widths = c(3, .4))
+
+png('Methods_Fig2.png',width=800,height=600)
+print(plot_grid(prow, legend, rel_widths = c(3, .4)))
+dev.off()
+```
+
+

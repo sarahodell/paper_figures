@@ -1,0 +1,193 @@
+---
+title: "Methods_Fig1"
+author: "Sarah Odell"
+date: "12/19/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Figure 1 of Methods Paper
+
+```{r}
+library('data.table')
+library('ggplot2')
+library('cowplot')
+library('imager')
+library('dplyr')
+library('tibble')
+
+hex_colors=c("#f42896","#84ef7c","#a8bc44","#8ed1d6","#702349",
+             "#f2875b","#28ad26","#afd3ef","#937266","#56cc59",
+             "#663dd3","#478959","#47145b","#7c2126","#ad147a",
+             "#afb735")
+#color schemes
+colors=c('red','grey','lightblue','yellow','blue','darkred','darkgrey','black','orange','purple','lightgreen','pink','darkgreen','darkblue','green','brown')
+
+founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra","A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
+
+# Chromosome ten maps
+gmap=fread('qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c10.csv',data.table=F)
+pmap=fread('qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c10.csv',data.table=F)
+```
+1A
+```{r}
+a<-ggdraw() + draw_image('Fig1A_crossing_scheme.png')
+a
+```
+
+1B
+```{r}
+
+pr10=readRDS('GridLMM_011619/bg8_filtered_genotype_probs.rds')#qtl2/Biogemma_071118/bg10_genoprobs_010319.rds')
+ten=pr10[[1]][20:30,,]
+samples=dimnames(ten)[[1]]
+
+# In physical distance
+all_pr=c()
+for(m in 1:10){
+  poi=ten[m,,]
+  tm=t(poi)
+  mdf <- as.data.frame(tm,row.names = rownames(tm))
+  mdf<-rownames_to_column(mdf,"marker")
+  names(mdf)=c("marker",founders)
+  mdf <- merge(mdf,pmap,by.x='marker',by.y='marker')
+  mdf <- mdf[,c(2:17,19)]
+  mlong<-melt(mdf,id="pos")
+  mlong$sample=samples[m]
+  all_pr=rbind(all_pr,mlong)
+}
+
+print(ggplot(data=all_pr,aes(x=pos/1e6,y=value,color=variable)) + facet_grid(sample~.) +scale_color_manual(values=hex_colors) + scale_fill_manual(values=hex_colors)+ geom_ribbon(aes(ymin=0,ymax=value,fill=variable),alpha=5/10) + geom_line() + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (Mb)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.x=element_blank()))
+
+
+# In genetic distance
+
+all_pr=c()
+for(m in 1:10){
+  poi=ten[m,,]
+  tm=t(poi)
+  mdf <- as.data.frame(tm,row.names = rownames(tm))
+  mdf<-rownames_to_column(mdf,"marker")
+  names(mdf)=c("marker",founders)
+  mdf <- merge(mdf,gmap,by.x='marker',by.y='marker')
+  mdf <- mdf[,c(2:17,19)]
+  mlong<-melt(mdf,id="pos")
+  mlong$sample=samples[m]
+  all_pr=rbind(all_pr,mlong)
+}
+
+png('Fig1B.png')
+print(ggplot(data=all_pr,aes(x=pos,y=value,color=variable)) + facet_grid(sample~.) +scale_color_manual(values=hex_colors) + scale_fill_manual(values=hex_colors)+ geom_ribbon(aes(ymin=0,ymax=value,fill=variable),alpha=5/10) + geom_line(alpha=0.5) + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (cM)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(legend.position = "none",strip.text.x=element_blank(),strip.background=element_blank()))
+dev.off()
+
+b<-ggplot(data=all_pr,aes(x=pos,y=value,color=variable)) + facet_grid(sample~.) +scale_color_manual(values=hex_colors) + scale_fill_manual(values=hex_colors)+ geom_ribbon(aes(ymin=0,ymax=value,fill=variable),alpha=5/10) + geom_line(alpha=0.5) + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (cM)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.x=element_blank(),strip.background=element_blank())
+
+b<-ggdraw() + draw_image('Fig1B.png')
+b
+```
+
+
+1C
+```{r}
+perc_founders=c(5.644,6.052,6.677,6.474,6.533,6.741,6.031,6.356,5.237,6.211,6.385,6.029,6.277,6.195,6.455,6.276)
+founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra","A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
+
+parentage=data.frame(founder=founders,perc=perc_founders)
+labels=sapply(parentage$perc,sprintf,fmt='%.3f%%')
+c<-ggplot(parentage,aes(x="",y=perc,fill=founder)) + 
+  geom_bar(width=1,stat="identity",alpha=0.8) + 
+  scale_fill_manual(values=hex_colors) + 
+  coord_polar(start=0,theta="y",direction=1) +
+  geom_text(aes(1.7,label=labels),size=3,position=position_stack(vjust=0.5)) + 
+  labs(caption="Percentage of founders in 344 DH MAGIC lines",fill="Founder") + 
+  theme(axis.ticks=element_blank(),  # the axis ticks
+        axis.title=element_blank(),  # the axis labels
+        axis.text.y=element_blank(), # the 0.75, 1.00, 1.25 labels
+        axis.text.x=element_blank(),
+        panel.grid=element_blank(),
+        panel.background = element_blank())
+```
+
+
+1D
+```{r}
+
+ibd_segments=fread('~/Documents/PBGG/MAGIC/qtl2/Biogemma_071118/DH10_Chr10_IBD_Regions.txt',data.table=F)
+
+mapmerge=merge(gmap,pmap,'marker')
+mapmerge=mapmerge[,c('marker','chr.x','pos.x','pos.y')]
+names(mapmerge)=c('marker','chr','cM','pos')
+mapmerge=mapmerge[order(mapmerge$pos),]
+rownames(mapmerge)=seq(1,dim(mapmerge)[1])
+
+m1 = match(ibd_segments$start,mapmerge$pos)
+start_cM = mapmerge[m1,]$cM
+m2 = match(ibd_segments$end,mapmerge$pos)
+end_cM = mapmerge[m2,]$cM
+
+ibd_segments$start_cM=start_cM
+ibd_segments$end_cM=end_cM
+
+
+# In physical distance
+theme_set(theme_classic())
+theme_update(text=element_text(family="Times"))
+#theme_update(plot.title = element_text(hjust = 0.5))
+theme_update(plot.title = element_text(size=12),axis.title=element_text(size=12))
+theme_update(panel.background=element_blank())
+ d<-ggplot(ibd_segments, aes(start/1e6, n_haps)) +
+  geom_segment(aes(xend = end/1e6,yend=n_haps),lineend="butt",size=10) + labs(caption = "Number of unique haplotypes across chromosome 10 of maize.") + xlab("Position (Mb)") + ylab("Haplotype Number")+guides(color=F)
+
+
+# In genetic distance
+theme_set(theme_classic())
+theme_update(text=element_text(family="Times"))
+theme_update(plot.caption = element_text(hjust = 0))
+theme_update(plot.title = element_text(size=12),axis.title=element_text(size=12))
+theme_update(panel.background=element_blank())
+theme_update(plot.caption=element_text(size=12))
+d<-ggplot(ibd_segments, aes(start_cM, n_haps)) +
+geom_segment(aes(xend = end_cM,yend=n_haps),lineend="butt",size=10)  + xlab("Position (cM)") + ylab("Haplotype Number")+guides(color=F)
+
+d
+```
+
+
+Put it all together
+```{r}
+#plot_grid(a,b,c,d)
+legend <- get_legend(
+  # create some space to the left of the legend
+  c + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+prow <- plot_grid(
+  a + theme(legend.position="none"),
+  b + theme(legend.position="none",strip.text.x=element_blank(),strip.background=element_blank()),
+  d + theme(legend.position="none"),
+  c + theme(legend.position="none",axis.ticks=element_blank(),  # the axis ticks
+        axis.title=element_blank(),  # the axis labels
+        axis.text.y=element_blank(), # the 0.75, 1.00, 1.25 labels
+        axis.text.x=element_blank(),
+        panel.grid=element_blank(),
+        panel.background = element_blank(),
+        panel.border = element_blank()),
+  
+#  align = 'vh',
+  labels = c("A", "B", "C","D"),
+  hjust = -1,
+  nrow = 2,
+  ncol=2
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+plot_grid(prow, legend, rel_widths = c(4, .4))
+
+png('Methods_Fig1.png',width=1000,height=800)
+print(plot_grid(prow, legend, rel_widths = c(4, .4)))
+dev.off()
+```
