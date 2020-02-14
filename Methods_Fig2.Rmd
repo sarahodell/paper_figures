@@ -24,42 +24,28 @@ library('GridLMM')
 
 ```{r}
 # Read in kinship matrix
-K=fread('GridLMM_011619/K_matrix_012319.txt',data.table=F)
+K=fread('../GridLMM_011619/K_matrix_012319.txt',data.table=F)
 rownames(K) = K[,1]
 K = as.matrix(K[,-1])
 colnames(K) = rownames(K)
 
 # Read in phenotypes
-phenotypes=fread('biogemma/phenotypes.csv',data.table=F)
+phenotypes=fread('../biogemma/phenotypes.csv',data.table=F)
 phenotypes$Genotype_code=gsub('-','.',phenotypes$Genotype_code)
 phenotypes <- phenotypes[phenotypes$Genotype_code %in% rownames(K),]
 env="BLOIS_2014_OPT"
 p=c('male_flowering_d6','female_flowering_d6','tkw_15','grain_yield_15','harvest_grain_moisture','total_plant_height')
 pheno=phenotypes[phenotypes$Loc.Year.Treat==env,c('Genotype_code',p)]
 
-sd_scaled <- function(x){
-  return((x - mean(x))/sd(x))
-}
-pheno_scaled = as.data.frame(apply(pheno[,p],MARGIN=2,FUN=sd_scaled),stringsAsFactors = F)
-pheno_scaled$Genotype_code = pheno$Genotype_code
+#sd_scaled <- function(x){
+#  return((x - mean(x))/sd(x))
+#}
+#pheno_scaled = as.data.frame(apply(pheno[,p],MARGIN=2,FUN=sd_scaled),stringsAsFactors = F)
+#pheno_scaled$Genotype_code = pheno$Genotype_code
 
-pheno_m = melt(pheno_scaled,'Genotype_code')
+pheno_m = melt(pheno,'Genotype_code')
 
 ```
-
-2A
-
-```{r}
-theme_set(theme_classic())
-theme_update(text=element_text(family="Times"))
-theme_update(plot.caption = element_text(hjust = 0))
-theme_update(plot.title = element_text(size=12),axis.title=element_text(size=12))
-theme_update(panel.background=element_blank())
-theme_update(plot.caption=element_text(size=12))
-a<-ggplot(pheno_m,aes(x=value,color=variable,fill=variable)) + geom_density() + facet_grid(variable~.) + theme_classic() + theme(strip.text.y = element_blank()) + guides(color=F) + scale_fill_discrete(name="Phenotype",labels=c("Days to Anthesis","Days to Silking","Thousand Kernel Weight","Grain Yield","Grain Moisture","Plant Height")) + xlab("Value") + ylab("Density")
-a
-```
-
 
 Calculate heritabilities of each phenotype in selected environment
 ```{r}
@@ -74,7 +60,41 @@ for(i in p){
   h2s=c(h2s,h2_start[[1]])
 }
 h2_data = data.frame(phenotype=p,h2=h2s,stringsAsFactors = F)
+fwrite(h2_data,'BLOIS_2014_OPT_h2_data.txt',row.names = F,quote=F,sep='\t')
 ```
+
+2A
+
+```{r}
+theme_set(theme_classic())
+theme_update(text=element_text(family="Times"))
+theme_update(plot.caption = element_text(hjust = 0))
+theme_update(plot.title = element_text(size=12),axis.title=element_text(size=12))
+theme_update(panel.background=element_blank())
+theme_update(plot.caption=element_text(size=12))
+
+a_list=vector("list",length=6)
+tags=c()
+labels=c("Days to Anthesis","Days to Silking","Thousand Kernel Weight","Grain Yield","Grain Moisture","Plant Height")
+
+h2_data=fread('BLOIS_2014_OPT_h2_data.txt',data.table=F)
+
+for(i in seq(1,6)){
+  sub=pheno[,c('Genotype_code',p[i])]
+  meanp=round(mean(sub[,c(p[i])]),2)
+  sdp=round(sd(sub[,c(p[i])]),2)
+  h2p=round(h2_data[i,]$h2,2)
+  data_string=bquote(atop(mu == .(meanp)~','~sigma == .(sdp),h ^ 2 == .(h2p)))
+  tags=c(tags,data_string)
+  a<-ggplot(sub,aes_string(x=p[i])) + geom_density() + theme_classic() + theme(axis.title.y = element_blank(),) + xlab(labels[i]) + theme()
+  a_list[[i]]=plot_grid(a) + draw_label(data_string,x=0.9,y=0.9)
+}
+#a<-ggplot(pheno_m,aes(x=value)) + geom_density() + facet_grid(variable~.,scales="free_y") + theme_classic() + theme(strip.text.y = element_blank()) +  scale_fill_discrete(name="Phenotype",labels=c("Days to Anthesis","Days to Silking","Thousand Kernel Weight","Grain Yield","Grain Moisture","Plant Height")) + xlab("Value") + ylab("Density") 
+plot_grid(plotlist=a_list,ncol=1)
+```
+
+
+
 
 2B
 ```{r}

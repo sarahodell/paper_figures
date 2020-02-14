@@ -1,15 +1,16 @@
 ---
 title: "Methods_Fig3"
 author: "Sarah Odell"
-date: "1/13/2020"
+date: "2/7/2020"
 output: html_document
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
+Figure 3: Results of GWAS/QTL Mapping for the 3 methods in each panels highlighting shared 
 
 ```{r}
 library('ggplot2')
@@ -17,206 +18,279 @@ library('data.table')
 library('reshape2')
 library('tibble')
 library('dplyr')
+library('tidyr')
+# Libraries ====
+library('readr')
+library('ggrepel')
+library('RColorBrewer')
 
 founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra", "A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
-
-mite=c(T,F,T,T,F,T,T,T,T,T,T,F,T,T,T,F)
-has_mite=which(mite==T,mite)
-no_mite=which(mite==F,mite)
 ```
 
+Read in 600K GWAS files for each chromosome for BLOIS_2014_OPt
 ```{r}
-bg8=readRDS('GridLMM_011619/bg8_genoprobs_010319.rds')
+snp_gwas=fread('600K_GWAS_BLOIS_2014_OPT_results.txt',data.table=F)
+snp_gwas=snp_gwas[complete.cases(snp_gwas),]
 
-mite_start=135.947816
-mite_end=135.946644
-pmap=fread('qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
-region=pmap[pmap$pos>135.5 & pmap$pos<136.5,]$marker
-markers=dimnames(bg8[[1]])[[3]]
-markers=markers[markers %in% region]
-sub8=lapply(bg8,function(x) x[,,markers])
+head(snp_gwas)
 ```
 
-Calculate probability that individual has the MITE
+
+Function for making Manhattan plots in ggplot2
+credit: https://github.com/pcgoddard/Burchardlab_Tutorials/wiki/GGplot2-Manhattan-Plot-Function
+
 ```{r}
-mite_prob=sapply(seq(1,length(region)), function(x) sapply(seq(1,344), function(i) sum(sub8[[1]][i,has_mite,x])))
-rownames(mite_prob)=dimnames(bg8[[1]])[[1]]
-colnames(mite_prob)=region
+
+# Variables ====
+mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
+#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
+#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
+#sig = 5e-8 # significant threshold line
+#sugg = 1e-7 # suggestive threshold line
+title="SNP GWAS BLOIS_2014_OPT"
+
+df.tmp <- df %>% 
+    # Compute chromosome size
+    group_by(CHR) %>% 
+    summarise(chr_len=max(BP)) %>% 
+    
+    # Calculate cumulative position of each chromosome
+    mutate(tot=cumsum(chr_len)-chr_len) %>%
+    select(-chr_len) %>%
+    
+    # Add this info to the initial dataset
+    left_join(df,., by=c("CHR")) %>%
+    
+    # Add a cumulative position of each SNP
+    arrange(CHR, BP) %>%
+    mutate( BPcum=as.numeric(BP+tot)) %>%
+    #mutate( is_annotate=ifelse(SNP %in% hlight, "yes", "no")) %>%
+    gather(key, value, -BP,-SNP,-CHR,-BPcum,-tot)
+
+df.tmp$sig=df.tmp$value < sig
+df.tmp$sig_f = interaction(df.tmp$key,df.tmp$sig)
+
+axisdf <- df.tmp %>% group_by(CHR) %>% summarize(center=(max(BPcum) + min(BPcum)) / 2 )
+
+ggplot(df.tmp, aes(BPcum, -log10(value), color=key)) + 
+  geom_point(aes(color=sig_f), alpha=0.5, size=1) + 
+    scale_color_manual(values = c(rep("black",6),mypalette)) +
+
+    # custom X axis:
+    scale_x_continuous( label = axisdf$CHR, breaks= axisdf$center ) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0,10)) + # expand=c(0,0)removes space between plot area and x axis 
+    
+    # add plot and axis titles
+    ggtitle(paste0(title)) +
+    labs(x = "Chromosome") +
+    
+    # add genome-wide sig and sugg lines
+    geom_hline(yintercept = -log10(sig)) +
+    geom_hline(yintercept = -log10(sugg), linetype="dashed") +
+    
+    # Add highlighted points
+    #geom_point(data=subset(df.tmp, is_highlight=="yes"), color="orange", size=2) +
+    
+    # Add label using ggrepel to avoid overlapping
+    #geom_label_repel(data=df.tmp[df.tmp$is_annotate=="yes",], aes(label=as.factor(SNP), alpha=0.7), size=5, force=1.3) +
+    
+    # Custom the theme:
+    theme_bw(base_size = 16) +
+    theme( 
+      plot.title = element_text(hjust = 0.5),
+      legend.position="none",
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+
 ```
 
-Grab phenotype data
 
 ```{r}
-env="BLOIS_2014_OPT"
-mite_prob=as.data.frame(mite_prob,stringsAsFactors=F)
-pheno=fread('GridLMM_011619/phenotypes.csv',data.table=F)
-pheno$Genotype_code=gsub('-','.',pheno$Genotype_code)
-pheno=pheno[pheno$Loc.Year.Treat==env,]
-mite_prob=mite_prob[rownames(mite_prob) %in% pheno$Genotype_code,]
-m=match(rownames(mite_prob),pheno$Genotype_code)
-mite_prob$male_flowering_d6 = pheno[m,]$male_flowering_d6 - mean(pheno$male_flowering_d6)
-```
+#col=c("Days to Silking" = mypalette[1],"Grain Yield"=mypalette[2],"Grain Moisture"=mypalette[3],"Days to Anthesis"=mypalette[4],"Thousand-Kernel Weight"=mypalette[5],"Plant Height"=mypalette[6])
+mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
+col=c("female_flowering_d6_P.FALSE"="black","grain_yield_15_P.FALSE"="black",    
+"harvest_grain_moisture_P.FALSE"="black","male_flowering_d6_P.FALSE"="black",  
+ "tkw_15_P.FALSE"="black","total_plant_height_P.FALSE"="black",
+ "female_flowering_d6_P.TRUE"=mypalette[1],"grain_yield_15_P.TRUE"=mypalette[2],      
+"harvest_grain_moisture_P.TRUE"=mypalette[3],"male_flowering_d6_P.TRUE"=mypalette[4],  
+"tkw_15_P.TRUE"=mypalette[5] ,"total_plant_height_P.TRUE"=mypalette[6])
 
-Reformat for plotting
-```{r}
-#test=mite_prob[1:10,]
-samples=rownames(mite_prob)
+labels=c("Days to Silking","Grain Yield","Grain Moisture","Days to Anthesis","Thousand Kernel Weight","Plant Height")
 
-mite_prob$sample=rownames(mite_prob)
-sample_f=mite_prob[order(mite_prob$male_flowering_d6),]$sample
-mite_prob$sample_f = factor(mite_prob$sample,levels=c(mite_prob[order(mite_prob$male_flowering_d6),]$sample))
 
-no_samples=dim(mite_prob)[1]
+gg.manhattan <- function(df, threshold, col, ylims,legend_labels=NULL){
+  df.tmp <- df %>% 
+    # Compute chromosome size
+    group_by(CHR) %>% 
+    summarise(chr_len=max(BP)) %>% 
+    
+    # Calculate cumulative position of each chromosome
+    mutate(tot=cumsum(chr_len)-chr_len) %>%
+    select(-chr_len) %>%
+    
+    # Add this info to the initial dataset
+    left_join(df,., by=c("CHR")) %>%
+    
+    # Add a cumulative position of each SNP
+    arrange(CHR, BP) %>%
+    mutate( BPcum=as.numeric(BP+tot)) %>%
+    #mutate( is_annotate=ifelse(SNP %in% hlight, "yes", "no")) %>%
+    gather(key, value, -BP,-SNP,-CHR,-BPcum,-tot)
 
-all_pr=c()
-for(i in 1:no_samples){
-  poi=mite_prob[i,1:281]
-  sf=mite_prob[i,284]
-  ft=mite_prob[i,282]
-  tm=t(poi)
-  mdf <- as.data.frame(tm,row.names = rownames(tm),stringsAsFactors = F)
-  mdf<-rownames_to_column(mdf,"marker")
-  names(mdf)=c("marker",'mite_prob')
-  mdf <- merge(mdf,pmap,by.x='marker',by.y='marker')
-  mdf$sample=samples[i]
-  mdf$sample_f=sf
-  mdf$male_flowering_d6=ft
-  #mlong<-melt(mdf,id="pos")
-  #mdf$sample=samples[m]
-  all_pr=rbind(all_pr,mdf)
+    df.tmp$sig=df.tmp$value < threshold
+    df.tmp$sig_f = interaction(df.tmp$key,df.tmp$sig)
+
+    axisdf <- df.tmp %>% group_by(CHR) %>% summarize(center=( max(BPcum) + min(BPcum) ) / 2 )
+
+    ggplot(df.tmp, aes(BPcum, -log10(value), color=key)) + 
+    geom_point(aes(color=sig_f), alpha=0.5, size=1) + 
+    scale_color_manual(values = col,limits=c(levels(df.tmp$sig_f)[7:12]),labels=labels) +
+    #scale_color_discrete(breaks=c(levels(df.tmp$sig_f)[7:12]),palette = col,name="Phenotype") +
+
+    # custom X axis:
+    scale_x_continuous( label = axisdf$CHR, breaks= axisdf$center ) +
+    scale_y_continuous(expand = c(0, 0), limits = ylims) + # expand=c(0,0)removes space between plot area and x axis 
+    
+    # add plot and axis titles
+    #ggtitle(paste0(title)) +
+    labs(x = "Chromosome") +
+    
+    # add genome-wide sig and sugg lines
+    geom_hline(yintercept = -log10(threshold), linetype="dashed") +
+    #geom_hline(yintercept = -log10(sugg), linetype="dashed") +
+    
+    # Add highlighted points
+    #geom_point(data=subset(df.tmp, is_highlight=="yes"), color="orange", size=2) +
+    
+    # Add label using ggrepel to avoid overlapping
+    #geom_label_repel(data=df.tmp[df.tmp$is_annotate=="yes",], aes(label=as.factor(SNP), alpha=0.7), size=5, force=1.3) +
+    
+    # Custom the theme:
+    theme_classic() +
+    theme( 
+      plot.title = element_text(hjust = 0.5),
+      #legend.position="none",
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+
 }
 
 
 ```
 
-Plot
+600K SNP GWAS
 
 ```{r}
+snp_threshold=10^-6.459435887215
 
-test=all_pr[all_pr$sample_f %in% sample_f[1:20] |all_pr$sample_f %in% sample_f[305:325] ,]
+# Variables ====
 
-pdf('mite_probability_chr8.pdf')
-print(ggplot(test,aes(x=pos,y=mite_prob)) + facet_grid(sample_f~.) + geom_ribbon(aes(ymin=0,ymax=mite_prob,fill='red',alpha=5/10)) + geom_line(color='red') + ggtitle("MITE Probability, Chromosome 8") + xlab("Position (Mb)") + ylab("Probability") +  guides(alpha=FALSE) + geom_vline(xintercept=mite_start) + geom_vline(xintercept=mite_end) + theme_classic() +  theme(axis.ticks.y=element_blank(),axis.text.y=element_blank(),strip.background = element_blank(),strip.text.y = element_blank()))
+#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
+#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
+#sig = 5e-6 # significant threshold line
+sugg = 1e-5 # suggestive threshold line
+title="SNP GWAS BLOIS_2014_OPT"
+
+# Define Function ====
+# see below
+#sub=snp_gwas[snp_gwas$CHR==8,]
+# Run Function ====
+a<-gg.manhattan(snp_gwas, threshold=snp_threshold, 
+             col=col,
+             ylims=c(0,10)) + labs(caption = title)
+
+a
+```
+
+Founder probs
+```{r}
+founder_threshold=10^-5.13284907365289
+fp_gwas=fread('Founder_GWAS_BLOIS_2014_OPT_results.txt',data.table=F)
+
+head(fp_gwas)
+```
+
+```{r}
+# Variables ====
+#mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
+#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
+#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
+#sig = 5e-6 # significant threshold line
+sugg = 1e-5 # suggestive threshold line
+title="Founder GWAS BLOIS_2014_OPT"
+
+# Define Function ====
+# see below
+
+# Run Function ====
+b<-gg.manhattan(fp_gwas, threshold=founder_threshold, 
+             col=col,
+             ylims=c(0,10), legend_labels = labels) + labs(caption = title,color="Phenotype")
+b
+```
+
+
+Haplotype probs
+```{r}
+mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
+haplotype_threshold=10^-5.90233906559636
+hp_gwas=fread('Haplotype_GWAS_BLOIS_2014_OPT_results.txt',data.table=F)
+hp_gwas=hp_gwas[,!names(hp_gwas) %in% "HAPGRP"]
+head(hp_gwas)
+```
+
+
+```{r}
+#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
+#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
+#sig = 5e-6 # significant threshold line
+#sugg = 1e-5 # suggestive threshold line
+title="Haplotype GWAS BLOIS_2014_OPT"
+
+# Define Function ====
+# see below
+
+# Run Function ====
+c<-gg.manhattan(hp_gwas, threshold=haplotype_threshold, 
+             col=col,
+             ylims=c(0,10))+ labs(caption = title)
+c
+
+```
+
+
+Put it all together
+```{r}
+mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
+colors=c("Days to Silking" = mypalette[1],"Grain Yield"=mypalette[2],"Grain Moisture"=mypalette[3],"Days to Anthesis"=mypalette[4],"Thousand-Kernel Weight"=mypalette[5],"Plant Height"=mypalette[6])
+
+#plot_grid(a,b,c,d)
+legend <- get_legend(
+  # create some space to the left of the legend
+  b + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+prow <- plot_grid(
+  a + theme(legend.position="none"),
+  b + theme(legend.position="none",strip.text.x=element_blank()),
+  c + theme(legend.position="none",axis.ticks=element_blank()),
+  
+#  align = 'vh',
+  labels = c("A", "B", "C"),
+  hjust = -1,
+  nrow = 3,
+  ncol=1
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+plot_grid(prow, legend, rel_widths = c(4, .4))
+
+png('Methods_Fig3.png',width=1000,height=1000)
+print(plot_grid(prow, legend, rel_widths = c(4, .4)))
 dev.off()
 ```
-
-```{r}
-marker='AX-91102970'
-at_mite=all_pr[all_pr$marker==marker,]
-#drop individual with 0.5 probabilitiy
-at_mite=at_mite[at_mite$sample!='EB.10H.H.00060',]
-at_mite$mite_prob_f = as.factor(ifelse(at_mite$mite_prob>0.9,1,0))
-
-ggplot(at_mite,aes(x=mite_prob_f,y=male_flowering_d6)) + geom_jitter()
-```
-
-
-
-```{r}
-full_samples=dimnames(bg8[[1]])[[1]]
-most_likely=founders[sapply(seq(1,344),function(x) which.max(bg8[[1]][x,,marker]))]
-max_prob=sapply(seq(1,344),function(x) max(bg8[[1]][x,,marker]))
-geno_probs=data.frame(sample=full_samples,mx_founder=most_likely,mx_prob=max_prob,stringsAsFactors = F)
-geno_probs=geno_probs[geno_probs$sample %in% samples,]
-
-at_mite_merge=merge(at_mite,geno_probs,by.x='sample')
-
-#filtering
-at_mite_merge=at_mite_merge[at_mite_merge$mite_prob<0.2 | at_mite_merge$mite_prob>0.8,]
-
-at_mite_merge$has_mite=ifelse(at_mite_merge$mite_prob>0.9,T,F)
-mean_ft=at_mite_merge %>% group_by(mx_founder) %>% summarize(mean_ft=mean(male_flowering_d6))
-
-gg_color_hue <- function(n) {
-  hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
-}
-
-mean_ft$color=gg_color_hue(16)
-x=c(1.5,1.5,0.5,0.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5,1.5,0.5,0.5,1.5)
-xend=c(2.5,2.5,1.5,1.5,2.5,2.5,2.5,2.5,2.5,2.5,2.5,2.5,2.5,1.5,1.5,2.5)
-mean_lines= ggplot(at_mite_merge,aes(x=has_mite,y=male_flowering_d6)) + geom_jitter(aes(color=mx_founder)) + geom_segment(y=c(mean_ft$mean_ft[1]),yend=c(mean_ft$mean_ft[1]),x=c(x[1]),xend=c(xend[1]),colour=c(mean_ft$color[1])) + geom_segment(y=c(mean_ft$mean_ft[2]),yend=c(mean_ft$mean_ft[2]),x=c(x[2]),xend=c(xend[2]),colour=c(mean_ft$color[2])) + geom_segment(y=c(mean_ft$mean_ft[3]),yend=c(mean_ft$mean_ft[3]),x=c(x[3]),xend=c(xend[3]),colour=c(mean_ft$color[3])) + geom_segment(y=c(mean_ft$mean_ft[4]),yend=c(mean_ft$mean_ft[4]),x=c(x[4]),xend=c(xend[4]),colour=c(mean_ft$color[4])) + geom_segment(y=c(mean_ft$mean_ft[5]),yend=c(mean_ft$mean_ft[5]),x=c(x[5]),xend=c(xend[5]),colour=c(mean_ft$color[5])) + geom_segment(y=c(mean_ft$mean_ft[6]),yend=c(mean_ft$mean_ft[6]),x=c(x[6]),xend=c(xend[6]),colour=c(mean_ft$color[6])) + geom_segment(y=c(mean_ft$mean_ft[7]),yend=c(mean_ft$mean_ft[7]),x=c(x[7]),xend=c(xend[7]),colour=c(mean_ft$color[7])) + geom_segment(y=c(mean_ft$mean_ft[8]),yend=c(mean_ft$mean_ft[8]),x=c(x[8]),xend=c(xend[8]),colour=c(mean_ft$color[8])) + geom_segment(y=c(mean_ft$mean_ft[9]),yend=c(mean_ft$mean_ft[9]),x=c(x[9]),xend=c(xend[9]),colour=c(mean_ft$color[9])) + geom_segment(y=c(mean_ft$mean_ft[10]),yend=c(mean_ft$mean_ft[10]),x=c(x[10]),xend=c(xend[10]),colour=c(mean_ft$color[10])) + geom_segment(y=c(mean_ft$mean_ft[11]),yend=c(mean_ft$mean_ft[11]),x=c(x[11]),xend=c(xend[11]),colour=c(mean_ft$color[11])) + geom_segment(y=c(mean_ft$mean_ft[12]),yend=c(mean_ft$mean_ft[12]),x=c(x[12]),xend=c(xend[12]),colour=c(mean_ft$color[12])) + geom_segment(y=c(mean_ft$mean_ft[13]),yend=c(mean_ft$mean_ft[13]),x=c(x[13]),xend=c(xend[13]),colour=c(mean_ft$color[13])) + geom_segment(y=c(mean_ft$mean_ft[14]),yend=c(mean_ft$mean_ft[14]),x=c(x[14]),xend=c(xend[14]),colour=c(mean_ft$color[14])) + geom_segment(y=c(mean_ft$mean_ft[15]),yend=c(mean_ft$mean_ft[15]),x=c(x[15]),xend=c(xend[15]),colour=c(mean_ft$color[15])) + geom_segment(y=c(mean_ft$mean_ft[16]),yend=c(mean_ft$mean_ft[16]),x=c(x[16]),xend=c(xend[16]),colour=c(mean_ft$color[16]))
-
-mean_lines
-
-
-```
-
-```{r}
-library('emmeans')
-mod1 = lm(male_flowering_d6 ~ mx_founder, at_mite_merge)
-emeans_ft= as.data.frame(emmeans(mod1,'mx_founder'),stringsAsFactors=F)
-emeans_ft$has_mite=c(T,T,F,F,T,T,T,T,T,T,T,T,T,F,F,T)
-
-ggplot(emeans_ft,aes(x=mx_founder,y=emmean,color=has_mite)) +geom_point() + geom_errorbar(aes(ymin=lower.CL,ymax=upper.CL))
-```
-
-```{r}
-gmap=fread('qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c8.csv',data.table=F)
-pmap=fread('qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
-
-rap2_7_start=136008216/1e6
-rap2_7_end=136013084/1e6
-haps=fread('GridLMM_011619/bg8_ibd_blocks.txt',data.table=F)
-site=haps[haps$start>135500000 & haps$end<136500000,]
-
-
-mapmerge=merge(gmap,pmap,'marker')
-mapmerge=mapmerge[,c('marker','chr.x','pos.x','pos.y')]
-names(mapmerge)=c('marker','chr','cM','pos')
-mapmerge=mapmerge[order(mapmerge$pos),]
-rownames(mapmerge)=seq(1,dim(mapmerge)[1])
-
-m1 = match(site$start,mapmerge$pos*1e6)
-start_cM = mapmerge[m1,]$cM
-m2 = match(site$end,mapmerge$pos*1e6)
-end_cM = mapmerge[m2,]$cM
-
-site$start_cM=start_cM
-site$end_cM=end_cM
-site$start_marker=mapmerge[m1,]$marker
-site$end_marker=mapmerge[m2,]$marker
-
-cand_pos=mapmerge[mapmerge$marker==marker,]$pos*1e6
-cand_block=site[site$start<cand_pos & site$end>cand_pos,]
-
-block_start=cand_block$start_marker
-block_end=cand_block$end_marker
-
-```
-
-
-```{r}
-hap=readRDS('AX_91102970_haploprobs.rds')
-for(i in seq(1,12)){
-  hap[[i]]=as.data.frame(hap[[i]])
-  hap[[i]]$hapgrp=i
-  hap[[i]]=rownames_to_column(hap[[i]],"sample")
-  }
-all_hapgrps=c()
-for(i in seq(1,12)){all_hapgrps=rbind(all_hapgrps,hap[[i]][,c(marker,'hapgrp','sample')])}
-
-test=all_hapgrps[all_hapgrps$sample=="EB.09S.H.00081",]
-
-max_prob=all_hapgrps %>% group_by(sample) %>% slice(which.max(`AX-91102970`))
-max_prob=max_prob[max_prob$sample %in% pheno$Genotype_code,]
-s=match(max_prob$sample,pheno$Genotype_code)
-max_prob$male_flowering_d6=pheno[s,]$male_flowering_d6 - mean(pheno$male_flowering_d6)
-
-```
-
-
-```{r}
-info=data.frame(founders=c('A632_usa','B73_inra', 'CO255_inra', 'FV252_inra' ,'OH43_inra', 'A654_inra', 'FV2_inra', 'C103_inra','EP1_inra', 'D105_inra', 'W117_inra', 'B96', 'DK63', 'F492', 'ND245', 'VA85'),hapgrp=c(1,2,3,4,5,6,7,8,9,10,11,10,12,6,9,6),has_mite=mite,hapgrp_match=c(T,T,T,T,T,F,T,T,T,F,T,F,T,F,T,F),mite_match=c(F,T,T,F,T,T,T,F,T,T,T,T,T,F,T,T),stringsAsFactors=F)
-
-hap_info=data.frame(hapgrps=seq(1,12),mite=c("present","absent","present","present","absent","mixed","present","present","present","mixed","present","present"),stringsAsFactors = F)
-
-h=match(max_prob$hapgrp,hap_info$hapgrp)
-max_prob$has_mite=hap_info[h,]$mite
-```
-
-```{r}
-ggplot(max_prob,aes(x=as.factor(has_mite),y=male_flowering_d6)) + geom_boxplot() +geom_jitter(aes(color=as.factor(hapgrp)))
-```
-
-
