@@ -1,5 +1,5 @@
 ---
-title: "Methods_Fig3"
+title: "Methods_Fig3 Environment Testing"
 author: "Sarah Odell"
 date: "2/7/2020"
 output: html_document
@@ -13,6 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 Figure 3: Results of GWAS/QTL Mapping for the 3 methods in each panels highlighting shared 
 
 ```{r}
+args=commandArgs(trailingOnly=T)
+e=as.character(args[[1]])
+
 library('ggplot2')
 library('data.table')
 library('reshape2')
@@ -28,97 +31,17 @@ library('RColorBrewer')
 founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra", "A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
 
 threshtable=fread('threshold_table.txt',data.table=F)
-env="BLOIS_2014_OPT"
 
 threshtable=threshtable[threshtable$environment==env,]
 threshtable$phenotype=paste0(threshtable$phenotype,"_P")
 threshtable=threshtable[!(threshtable$phenotype %in% c("male_flowering_days_P","female_flowering_days_P")), ]
-```
 
-Read in 600K GWAS files for each chromosome for BLOIS_2014_OPt
-```{r}
-snp_gwas=fread('600K_GWAS_BLOIS_2014_OPT_results.txt',data.table=F)
+snp_gwas=fread(sprintf('600K_GWAS_%s_results.txt',e),data.table=F)
 snp_gwas=snp_gwas[complete.cases(snp_gwas),]
 
-head(snp_gwas)
 snpthresh=threshtable[threshtable$method=="600K_SNP",]
 snpthresh=snpthresh[,c('phenotype','threshold')]
-```
 
-
-Function for making Manhattan plots in ggplot2
-credit: https://github.com/pcgoddard/Burchardlab_Tutorials/wiki/GGplot2-Manhattan-Plot-Function
-
-```{r}
-
-# Variables ====
-mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
-#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
-#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
-#sig = 5e-8 # significant threshold line
-#sugg = 1e-7 # suggestive threshold line
-title="SNP GWAS BLOIS_2014_OPT"
-
-df.tmp <- df %>% 
-    # Compute chromosome size
-    group_by(CHR) %>% 
-    summarise(chr_len=max(BP)) %>% 
-    
-    # Calculate cumulative position of each chromosome
-    mutate(tot=cumsum(chr_len)-chr_len) %>%
-    select(-chr_len) %>%
-    
-    # Add this info to the initial dataset
-    left_join(df,., by=c("CHR")) %>%
-    
-    # Add a cumulative position of each SNP
-    arrange(CHR, BP) %>%
-    mutate( BPcum=as.numeric(BP+tot)) %>%
-    #mutate( is_annotate=ifelse(SNP %in% hlight, "yes", "no")) %>%
-    gather(key, value, -BP,-SNP,-CHR,-BPcum,-tot)
-
-df.tmp = df.tmp %>% left_join(snpthresh,.,by=c("phenotype"="key"))
-df.tmp$sig=df.tmp$value < 10^-df.tmp$threshold
-df.tmp$sig_f = interaction(df.tmp$phenotype,df.tmp$sig)
-
-axisdf <- df.tmp %>% group_by(CHR) %>% summarize(center=(max(BPcum) + min(BPcum)) / 2 )
-
-ggplot(df.tmp, aes(BPcum, -log10(value), color=phenotype)) + 
-  geom_point(aes(color=sig_f), alpha=0.5, size=1) + 
-    scale_color_manual(values = c(rep("black",6),mypalette)) +
-
-    # custom X axis:
-    scale_x_continuous( label = axisdf$CHR, breaks= axisdf$center ) +
-    scale_y_continuous(expand = c(0, 0), limits = c(0,10)) + # expand=c(0,0)removes space between plot area and x axis 
-    
-    # add plot and axis titles
-    ggtitle(paste0(title)) +
-    labs(x = "Chromosome") +
-    
-    # add genome-wide sig and sugg lines
-    geom_hline(yintercept = -log10(sig)) +
-    geom_hline(yintercept = -log10(sugg), linetype="dashed") +
-    
-    # Add highlighted points
-    #geom_point(data=subset(df.tmp, is_highlight=="yes"), color="orange", size=2) +
-    
-    # Add label using ggrepel to avoid overlapping
-    #geom_label_repel(data=df.tmp[df.tmp$is_annotate=="yes",], aes(label=as.factor(SNP), alpha=0.7), size=5, force=1.3) +
-    
-    # Custom the theme:
-    theme_bw(base_size = 16) +
-    theme( 
-      plot.title = element_text(hjust = 0.5),
-      legend.position="none",
-      panel.border = element_blank(),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank()
-    )
-
-```
-
-
-```{r}
 #col=c("Days to Silking" = mypalette[1],"Grain Yield"=mypalette[2],"Grain Moisture"=mypalette[3],"Days to Anthesis"=mypalette[4],"Thousand-Kernel Weight"=mypalette[5],"Plant Height"=mypalette[6])
 mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
 col=c("female_flowering_d6_P.FALSE"="black","grain_yield_15_P.FALSE"="black",    
@@ -191,97 +114,48 @@ gg.manhattan <- function(df, threshtable, col, ylims,legend_labels=NULL){
 }
 
 
-```
 
-600K SNP GWAS
+title=sprintf("SNP GWAS %s",e)
 
-```{r}
-#snp_threshold=10^-6.459435887215
-
-# Variables ====
-
-#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
-#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
-#sig = 5e-6 # significant threshold line
-sugg = 1e-5 # suggestive threshold line
-title="SNP GWAS BLOIS_2014_OPT"
-
-# Define Function ====
-# see below
-#sub=snp_gwas[snp_gwas$CHR==8,]
-# Run Function ====
 a<-gg.manhattan(snp_gwas, threshtable=snpthresh, 
              col=col,
              ylims=c(0,10)) + labs(caption = title)
 
-a
-```
 
-Founder probs
-```{r}
-#founder_threshold=10^-5.13284907365289
-fp_gwas=fread('Founder_GWAS_BLOIS_2014_OPT_results.txt',data.table=F)
+#Founder probs
 
-head(fp_gwas)
+fp_gwas=fread(sprintf('Founder_GWAS_%s_results.txt',data.table=F),e)
+
 
 fpthresh=threshtable[threshtable$method=="founder_probs",]
 fpthresh=fpthresh[,c('phenotype','threshold')]
-```
 
-```{r}
-# Variables ====
-#mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
-#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
-#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
-#sig = 5e-6 # significant threshold line
-sugg = 1e-5 # suggestive threshold line
-title="Founder GWAS BLOIS_2014_OPT"
+title=sprintf("Founder GWAS %s",e)
 
-# Define Function ====
-# see below
-
-# Run Function ====
 b<-gg.manhattan(fp_gwas, threshtable=fpthresh, 
              col=col,
              ylims=c(0,10), legend_labels = labels) + labs(caption = title,color="Phenotype")
-b
-```
 
 
-Haplotype probs
-```{r}
+
+#Haplotype probs
+
 mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
 haplotype_threshold=10^-5.90233906559636
-hp_gwas=fread('Haplotype_GWAS_BLOIS_2014_OPT_results.txt',data.table=F)
+hp_gwas=fread(sprintf('Haplotype_GWAS_%s_results.txt',e),data.table=F)
 hp_gwas=hp_gwas[,!names(hp_gwas) %in% "HAPGRP"]
-head(hp_gwas)
 
 hpthresh=threshtable[threshtable$method=="haplotype_probs",]
 hpthresh=hpthresh[,c('phenotype','threshold')]
-```
+
+title=sprintf("Haplotype GWAS %s",e)
 
 
-```{r}
-#mypalette <- c("#E2709A", "#CB4577", "#BD215B", "#970F42", "#75002B") # chr color palette
-#mysnps <- c('AX-91583310','AX-91102970') # snps to highlight
-#sig = 5e-6 # significant threshold line
-#sugg = 1e-5 # suggestive threshold line
-title="Haplotype GWAS BLOIS_2014_OPT"
-
-# Define Function ====
-# see below
-
-# Run Function ====
 c<-gg.manhattan(hp_gwas, threshtable=hpthresh, 
              col=col,
              ylims=c(0,10))+ labs(caption = title)
-c
-
-```
 
 
-Put it all together
-```{r}
 mypalette = c("#F8766D","#C49A00","#53B400","#00C094","#00B6EB","#A58AFF")
 colors=c("Days to Silking" = mypalette[1],"Grain Yield"=mypalette[2],"Grain Moisture"=mypalette[3],"Days to Anthesis"=mypalette[4],"Thousand-Kernel Weight"=mypalette[5],"Plant Height"=mypalette[6])
 
@@ -307,7 +181,6 @@ prow <- plot_grid(
 # the width of one plot (via rel_widths).
 plot_grid(prow, legend, rel_widths = c(4, .4))
 
-png('Methods_Fig3.png',width=2000,height=1500)
+png(sprintf('Methods_Fig3_%s.png',e),width=2000,height=1500)
 print(plot_grid(prow, legend, rel_widths = c(4, .4)))
 dev.off()
-```

@@ -49,7 +49,7 @@ Grab phenotype data
 ```{r}
 env="BLOIS_2014_OPT"
 mite_prob=as.data.frame(mite_prob,stringsAsFactors=F)
-pheno=fread('GridLMM_011619/phenotypes.csv',data.table=F)
+pheno=fread('../GridLMM_011619/phenotypes.csv',data.table=F)
 pheno$Genotype_code=gsub('-','.',pheno$Genotype_code)
 pheno=pheno[pheno$Loc.Year.Treat==env,]
 mite_prob=mite_prob[rownames(mite_prob) %in% pheno$Genotype_code,]
@@ -155,10 +155,10 @@ ggplot(emeans_ft,aes(x=mx_founder,y=emmean,color=has_mite)) +geom_point() + geom
 gmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c8.csv',data.table=F)
 pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
 
-rap2_7_start=136008216/1e6
-rap2_7_end=136013084/1e6
-haps=fread('GridLMM_011619/bg8_ibd_blocks.txt',data.table=F)
-site=haps[haps$start>135500000 & haps$end<136500000,]
+rap2_7_start=136008216
+rap2_7_end=136013084
+haps=fread('../bg8_germline_ibd_segments.txt',data.table=F)
+site=haps[haps$start>133000000 & haps$end<137500000,]
 
 
 mapmerge=merge(gmap,pmap,'marker')
@@ -182,6 +182,7 @@ cand_block=site[site$start<cand_pos & site$end>cand_pos,]
 
 block_start=cand_block$start_marker
 block_end=cand_block$end_marker
+
 
 ```
 

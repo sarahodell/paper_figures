@@ -19,12 +19,14 @@ library('imager')
 library('dplyr')
 library('tibble')
 
-hex_colors=c("#f42896","#84ef7c","#a8bc44","#8ed1d6","#702349",
-             "#f2875b","#28ad26","#afd3ef","#937266","#56cc59",
-             "#663dd3","#478959","#47145b","#7c2126","#ad147a",
-             "#afb735")
+#hex_colors=c("#f42896","#84ef7c","#a8bc44","#8ed1d6","#702349",
+#             "#f2875b","#28ad26","#afd3ef","#937266","#56cc59",
+#             "#663dd3","#478959","#47145b","#7c2126","#ad147a",
+#             "#afb735")
 #color schemes
-colors=c('red','grey','lightblue','yellow','blue','darkred','darkgrey','black','orange','purple','lightgreen','pink','darkgreen','darkblue','green','brown')
+#colors=c('red','grey','lightblue','yellow','blue','darkred','darkgrey','black','orange','purple','lightgreen','pink','darkgreen','darkblue','green','brown')
+
+colorcodes=fread('founder_color_codes.txt',data.table=F)
 
 founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra","A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
 
@@ -34,8 +36,8 @@ pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=
 ```
 1A
 ```{r}
-#a<-ggdraw() + draw_image('Fig1A_crossing_scheme.png')
-#a
+a<-ggdraw() + draw_image('Fig1A_crossing_scheme_real.png')
+a
 ```
 
 1B
@@ -62,8 +64,13 @@ for(m in 1:10){
   all_pr=rbind(all_pr,mlong)
 }
 
-a<-ggplot(data=all_pr,aes(x=pos,y=value,color=variable)) + facet_grid(sample~.) +scale_color_manual(values=hex_colors) + scale_fill_manual(values=hex_colors)+ geom_ribbon(aes(ymin=0,ymax=value,fill=variable),alpha=5/10) + geom_line() + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (Mb)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.x=element_blank())
-a
+all_pr$founder_f=factor(all_pr$variable,levels=founders)
+```
+
+```{r}
+
+b<-ggplot(data=all_pr,aes(x=pos,y=value,color=founder_f)) + facet_grid(sample~.) +scale_color_manual(values=colorcodes$hex_color) + scale_fill_manual(values=colorcodes$hex_color)+ geom_ribbon(aes(ymin=0,ymax=value,fill=founder_f),alpha=5/10) + geom_line() + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (Mb)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.y=element_blank())
+b
 ```
 
 
@@ -85,15 +92,15 @@ for(m in 1:10){
   mlong$sample=samples[m]
   all_pr2=rbind(all_pr2,mlong)
 }
-
+all_pr2$founder_f=factor(all_pr2$variable,levels=founders)
 #png('Fig1B.png')
 #print(ggplot(data=all_pr,aes(x=pos,y=value,color=variable)) + facet_grid(sample~.) +scale_color_manual(values=hex_colors) + scale_fill_manual(values=hex_colors)+ geom_ribbon(aes(ymin=0,ymax=value,fill=variable),alpha=5/10) + geom_line(alpha=0.5) + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (cM)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(legend.position = "none",strip.text.x=element_blank(),strip.background=element_blank()))
 #dev.off()
 
-b<-ggplot(data=all_pr2,aes(x=pos,y=value,color=variable)) + facet_grid(sample~.) +scale_color_manual(values=hex_colors) + scale_fill_manual(values=hex_colors)+ geom_ribbon(aes(ymin=0,ymax=value,fill=variable),alpha=5/10) + geom_line(alpha=0.5) + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (cM)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.x=element_blank(),strip.background=element_blank())
+c<-ggplot(data=all_pr2,aes(x=pos,y=value,color=founder_f)) + facet_grid(sample~.) +scale_color_manual(values=colorcodes$hex_color) + scale_fill_manual(values=colorcodes$hex_color)+ geom_ribbon(aes(ymin=0,ymax=value,fill=founder_f),alpha=5/10) + geom_line(alpha=0.5) + labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (cM)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.y=element_blank(),strip.background=element_blank())
 
 #b<-ggdraw() + draw_image('Fig1B.png')
-b
+c
 ```
 
 
@@ -111,11 +118,12 @@ b
 1D
 ```{r}
 
-ibd_segments=fread('~/Documents/PBGG/MAGIC/bg8_germline_ibd_segments.txt',data.table=F)
-gmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c8.csv',data.table=F)
-pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
+ibd_segments=fread('bg10_ibd_blocks_fixed.txt',data.table=F)
+gmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c10.csv',data.table=F)
+pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c10.csv',data.table=F)
 
-pmap$pos=pmap$pos*1e6
+pmap$pos=round(pmap$pos)
+#pmap$pos=pmap$pos*1e6
 mapmerge=merge(gmap,pmap,'marker')
 mapmerge=mapmerge[,c('marker','chr.x','pos.x','pos.y')]
 names(mapmerge)=c('marker','chr','cM','pos')
@@ -149,10 +157,10 @@ theme_update(plot.caption = element_text(hjust = 0))
 theme_update(plot.title = element_text(size=12),axis.title=element_text(size=12))
 theme_update(panel.background=element_blank())
 theme_update(plot.caption=element_text(size=12))
-d<-ggplot(ibd_segments, aes(start_cM, n_haps)) +
-geom_segment(aes(xend = end_cM,yend=n_haps),lineend="butt",size=10)  + xlab("Position (cM)") + ylab("Haplotype Number")+guides(color=F)
+e<-ggplot(ibd_segments, aes(start_cM, n_haps)) +
+geom_segment(aes(xend = end_cM,yend=n_haps),lineend="butt",size=10)  + xlab("Position (cM)") + ylab("Haplotype Number")+guides(color=F) + ylim(2,16)
 
-d
+e
 ```
 
 
@@ -166,16 +174,9 @@ legend <- get_legend(
 
 prow <- plot_grid(
   a + theme(legend.position="none"),
-  b + theme(legend.position="none",strip.text.x=element_blank(),strip.background=element_blank()),
+  b + theme(legend.position="none"),
   d + theme(legend.position="none"),
-  c + theme(legend.position="none",axis.ticks=element_blank(),  # the axis ticks
-        axis.title=element_blank(),  # the axis labels
-        axis.text.y=element_blank(), # the 0.75, 1.00, 1.25 labels
-        axis.text.x=element_blank(),
-        panel.grid=element_blank(),
-        panel.background = element_blank(),
-        panel.border = element_blank()),
-  
+  c + theme(legend.position="none"),  # the axis ticks
 #  align = 'vh',
   labels = c("A", "B", "C","D"),
   hjust = -1,

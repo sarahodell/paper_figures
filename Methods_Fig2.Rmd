@@ -75,7 +75,7 @@ theme_update(plot.caption=element_text(size=12))
 
 a_list=vector("list",length=6)
 tags=c()
-labels=c("Days to Anthesis","Days to Silking","Thousand Kernel Weight","Grain Yield","Grain Moisture","Plant Height")
+labels=c("Days to Anthesis (ggd)","Days to Silking (ggd)","Thousand Kernel Weight (g)","Grain Yield (kg/ha)","Grain Moisture (%)","Plant Height (cm)")
 
 h2_data=fread('BLOIS_2014_OPT_h2_data.txt',data.table=F)
 
@@ -84,13 +84,27 @@ for(i in seq(1,6)){
   meanp=round(mean(sub[,c(p[i])]),2)
   sdp=round(sd(sub[,c(p[i])]),2)
   h2p=round(h2_data[i,]$h2,2)
-  data_string=bquote(atop(mu == .(meanp)~','~sigma == .(sdp),h ^ 2 == .(h2p)))
+  data_string=bquote(h ^ 2 == .(h2p))
   tags=c(tags,data_string)
-  a<-ggplot(sub,aes_string(x=p[i])) + geom_density() + theme_classic() + theme(axis.title.y = element_blank(),) + xlab(labels[i]) + theme()
+  lower=mean(sub[,p[i]])-(2*sd(sub[,p[i]]))
+  upper=mean(sub[,p[i]])+(2*sd(sub[,p[i]]))
+  
+  dens <- density(sub[,p[i]])
+  data <- tibble(x = dens$x, y = dens$y) %>% 
+    mutate(variable = case_when(
+      (x >= lower & x <= upper) ~ "On",
+      (x < lower | x > upper) ~ "Off",
+      TRUE ~ NA_character_))
+  a<-ggplot(data,aes(x,y)) + geom_line() + theme_classic() + theme(axis.title.y = element_blank()) + xlab(labels[i]) + geom_area(data=filter(data,variable== "On"),fill='grey') + geom_vline(xintercept=mean(sub[,p[i]])) + theme()
   a_list[[i]]=plot_grid(a) + draw_label(data_string,x=0.9,y=0.9)
 }
 #a<-ggplot(pheno_m,aes(x=value)) + geom_density() + facet_grid(variable~.,scales="free_y") + theme_classic() + theme(strip.text.y = element_blank()) +  scale_fill_discrete(name="Phenotype",labels=c("Days to Anthesis","Days to Silking","Thousand Kernel Weight","Grain Yield","Grain Moisture","Plant Height")) + xlab("Value") + ylab("Density") 
 plot_grid(plotlist=a_list,ncol=1)
+
+
+png('Methods_Fig2.png',width=800,height=600)
+print(plot_grid(plotlist=a_list,ncol=1))
+dev.off()
 ```
 
 
@@ -126,7 +140,7 @@ rel_widths = c(5,4),
 # the width of one plot (via rel_widths).
 plot_grid(prow, legend, rel_widths = c(3, .4))
 
-png('Methods_Fig2.png',width=800,height=600)
+png('Methods_Fig2.png',width=1000,height=800)
 print(plot_grid(prow, legend, rel_widths = c(3, .4)))
 dev.off()
 ```

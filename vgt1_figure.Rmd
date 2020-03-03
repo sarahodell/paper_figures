@@ -1,0 +1,250 @@
+---
+title: "vgt1_figure"
+author: "Sarah Odell"
+date: "2/25/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library('data.table')
+library('ggplot2')
+library('GridLMM')
+```
+
+
+Need to get effect sizes of individuals and genotype probabilities...
+
+```{r}
+founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra", "A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
+
+colorcodes=fread('founder_color_codes.txt',data.table=F)
+
+
+mite=c(T,F,T,T,F,T,T,T,T,T,T,F,T,T,T,F)
+has_mite=which(mite==T,mite)
+no_mite=which(mite==F,mite)
+
+```
+
+
+```{r}
+bg8=readRDS('../GridLMM_011619/bg8_genoprobs_010319.rds')
+
+mite_start=135.947816
+mite_end=135.946644
+pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
+region=pmap[pmap$pos>135.5 & pmap$pos<136.5,]$marker
+markers=dimnames(bg8[[1]])[[3]]
+markers=markers[markers %in% region]
+sub8=lapply(bg8,function(x) x[,,markers])
+
+```
+
+Calculate probability that individual has the MITE
+```{r}
+mite_prob=sapply(seq(1,length(region)), function(x) sapply(seq(1,344), function(i) sum(sub8[[1]][i,has_mite,x])))
+rownames(mite_prob)=dimnames(bg8[[1]])[[1]]
+colnames(mite_prob)=region
+```
+
+Grab phenotype data
+
+```{r}
+env="BLOIS_2014_OPT"
+mite_prob=as.data.frame(mite_prob,stringsAsFactors=F)
+pheno=fread('../GridLMM_011619/phenotypes.csv',data.table=F)
+pheno$Genotype_code=gsub('-','.',pheno$Genotype_code)
+pheno=pheno[pheno$Loc.Year.Treat==env,]
+mite_prob=mite_prob[rownames(mite_prob) %in% pheno$Genotype_code,]
+m=match(rownames(mite_prob),pheno$Genotype_code)
+mite_prob$male_flowering_d6 = pheno[m,]$male_flowering_d6 - mean(pheno$male_flowering_d6)
+```
+
+Run GridLMM with founder probabilites and get effect sizes
+```{r}
+# Read in Kinship Matrix
+chr=8
+p="male_flowering_d6"
+K=fread(sprintf('../GridLMM_011619/K_matrix_chr%.0f.txt',chr),data.table=F)
+rownames(K)=K[,1]
+rownames(K)=gsub("-",".",rownames(K))
+K=as.matrix(K[,-1])
+colnames(K)=rownames(K)
+
+
+# Read in phenotypes
+# Grab the phenotype of interest and drop the genotypes not in the K matrix
+phenotypes=fread('../GridLMM_011619/phenotypes.csv',data.table=F)
+phenotypes=phenotypes[,c('Genotype_code','Loc.Year.Treat',p)]
+phenotypes$Genotype_code=gsub('-','.',phenotypes$Genotype_code)
+phenotypes=phenotypes[phenotypes$Genotype_code %in% rownames(K),]
+
+data=data.frame(ID=phenotypes$Genotype_code,Loc.Year.Treat=phenotypes$Loc.Year.Treat,y=phenotypes[,c(p)],stringsAsFactors=F)
+data=data[data$Loc.Year.Treat==env,]
+data=data[!is.na(data$y),]
+data$y = data$y - mean(data$y)
+
+# Read in the haplotype group probabilities
+# Filter genotypes that are not in the K matrix
+X_list=readRDS(sprintf('../GridLMM_011619/bg%.0f_filtered_genotype_probs.rds',chr))
+
+# Run GridLMM
+null_model = GridLMM_ML(y~1+(1|ID),data,relmat=list(ID=K),ML=T,REML=F)
+
+h2_start=null_model$results[,grepl('.ML',colnames(null_model$results),fixed=T),drop=FALSE]
+names(h2_start) = sapply(names(h2_start),function(x) strsplit(x,'.',fixed=T)[[1]][1])
+h2_start
+V_setup=null_model$setup
+
+Y=as.matrix(data$y)
+X_cov=null_model$lmod$X
+X_list_ordered=lapply(X_list,function(x) x[data$ID,])
+
+X_list_null=NULL
+
+gwas=run_GridLMM_GWAS(Y,X_cov,X_list_ordered[-1],X_list_null,V_setup=V_setup,h2_start=h2_start,method='ML',verbose=F)
+
+saveRDS(gwas,sprintf('../GridLMM_011619//Biogemma_chr%s_%s_x_%s_founderprobs.rds',chr,p,env))
+
+# Convert all very high and very low probabilities to 1 and 0, respectively
+X_list_full = lapply(X_list_ordered,function(x) sapply(seq(1,dim(x)[2]), function(i) ifelse(x[,i]>=0.95,1,ifelse(x[,i]<=0.05,0,x[,i]))))
+dimnames(X_list_full[[1]])[[2]]=dimnames(X_list_ordered[[1]])[[2]]
+
+dimnames(X_list_full[[1]])[[2]]=dimnames(X_list_ordered[[1]])[[2]]
+
+gwas_adjusted=gwas
+sums=lapply(X_list_full,function(x) colSums(x))
+for(i in 1:16){
+    s=sums[[i]]
+    t=dim(X_list_full[[i]])[1]-2
+    l=2
+    grab=which(s>t,s)
+    grab=c(grab,which(s<l,s))
+    grab=sort(grab)
+    beta=sprintf('beta.%.0f',seq(1,16))
+    gwas_adjusted[grab,beta]=0
+    gwas_adjusted[grab,'p_value_ML']=0.99
+    print(grab)
+}
+
+saveRDS(gwas_adjusted,sprintf('../GridLMM_011619//Biogemma_chr%s_%s_x_%s_founderprobs_adjusted.rds',chr,p,env))
+```
+
+
+```{r}
+m=match(gwas_adjusted$X_ID,pmap$marker)
+gwas_adjusted$pos=pmap$marker[m]
+gwas_adjusted$pos=pmap$pos[m]
+gwas_adjusted=gwas_adjusted[order(gwas_adjusted$pos),]
+rownames(gwas_adjusted)=seq(1,dim(gwas_adjusted)[1])
+
+threshold=10^-5.13284907365289
+effect_sizes=gwas_adjusted[gwas_adjusted$p_value_ML <= threshold,]
+```
+
+For now, just sum all the effect sizes in the whole region.
+Get the most likely founder for each DH line at the 16 signicant markers surrounding vgt1.
+Sum up the effect sizes for the assumed founder identity
+
+```{r}
+region=pmap[pmap$pos>135.5 & pmap$pos<136.5,]
+#bin_markers=effect_sizes$X_ID
+sub8=lapply(bg8,function(x) x[,,region$marker])
+dimnames(sub8[[1]])[[2]]=founders
+
+```
+
+Find out with DH lines have the mite and which don't and what their founder identity is at the vgt1 region
+
+```{r}
+f_prob=c()
+for(i in seq(1,344)){
+    f_prob=rbind(f_prob,sapply(seq(1,length(bin_markers)), function(x) which.max(sub8[[1]][i,,x])))
+} 
+f_prob=as.data.frame(f_prob)
+colnames(f_prob)=bin_markers
+f_prob$ID=dimnames(sub8[[1]])[[1]]
+
+# use closest marker as proxy
+mite_proxy=c("AX-91102970")
+
+f_prob=f_prob[f_prob$ID %in% rownames(mite_prob),]
+m=match(f_prob$ID,rownames(mite_prob))
+f_prob=f_prob[m,]
+rownames(f_prob)=seq(1,dim(f_prob)[1])
+f_prob$mite_prob=mite_prob[,mite_proxy]
+f_prob$mite_prob=ifelse(f_prob$mite_prob<0.1,0,ifelse(f_prob$mite_prob>0.9,1,f_prob$mite_prob))
+```
+
+
+```{r}
+
+founder_bins=melt(f_prob[,c("ID",bin_markers)],"ID")
+founder_bins$founder=founders[founder_bins$value]
+founder_bins$pos=effect_sizes[match(founder_bins$variable,effect_sizes$X_ID),]$pos
+founder_bins$value=1
+
+# set the order of the samples by having the mite or not and by increasing flowering time
+ID=unique(founder_bins$ID)
+has_mite=f_prob[match(ID,f_prob$ID),]$mite_prob
+ft=mite_prob[match(ID,rownames(mite_prob)),]$male_flowering_d6
+ID_order=data.frame(ID=ID,has_mite=has_mite,ft=ft)
+ID_order=ID_order[order(ID_order$has_mite,ID_order$ft,decreasing=c(T,F)),]
+rownames(ID_order)=seq(1,dim(ID_order)[1])
+ID_order$has_mite=ifelse(ID_order$has_mite==1,T,F)
+ID_order$ID_f=factor(ID_order$ID,levels=ID_order$ID)
+
+
+founder_bins$ID_f = ID_order[match(founder_bins$ID,ID_order$ID),]$ID_f
+founder_bins$founder_f=factor(founder_bins$founder,levels=founders)
+
+p1<-ggplot(data=founder_bins,aes(x=pos,y=value,color=founder_f)) +  geom_ribbon(aes(ymin=0,ymax=value,fill=founder_f),alpha=0.8) + geom_line()  + coord_flip() + facet_grid(.~ID_f) +  theme(strip.text.x=element_text(size=48,angle=90),axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.title.x=element_blank(),axis.line=element_blank(),axis.text.y=element_text(size=64),axis.title.y=element_text(size=64),legend.key.size=unit(0.5,"npc"),legend.text=element_text(size=64)) + guides(color=F) + xlab("Position (Mb)") + geom_vline(xintercept=mite_start,color="black")+ scale_color_manual(values=colorcodes$hex_color) + scale_fill_manual(values=colorcodes$hex_color)
+#+    labs(caption="Founder Probabilities, Chromosome 10",fill='Founder') + xlab("Position (Mb)") + ylab("Probability") + scale_y_continuous(breaks=c(0.0,0.5,1.0)) + guides(color=FALSE) + theme(strip.text.x=element_blank())
+
+
+
+#pdf('vgt1_regions_founderIDs.pdf',height=100,width=150)
+#print(p1)
+#dev.off()
+#p1
+```
+
+
+
+```{r}
+p2<-ggplot(ID_order,aes(x=ID_f,y=ft,color=has_mite)) + geom_point(size=20) + scale_colour_manual(values=c("TRUE"="red","FALSE"="black"),labels=c("MITE","NO MITE")) + xlab("Sample") + ylab("Days to Anthesis (ggd)") + theme(legend.title = element_blank(),panel.grid.major.x = element_line(), panel.grid.minor.x = element_line(),axis.text.x=element_text(size=64,angle=90),axis.text.y=element_text(size=64),axis.title.x=element_text(size=64),axis.title.y=element_text(size=64),legend.key.size=unit(0.5,"npc"),legend.text = element_text(size=64))#+ facet_grid(.~has_mite)
+#p2
+```
+
+
+
+```{r}
+#legend <- get_legend(
+#  # create some space to the left of the legend
+#  p1 + theme(legend.box.margin = margin(0, 0, 0, 12),legent.key.size=element)
+#)
+
+prow <- plot_grid(
+  p1 + theme(strip.text.x=element_blank()),
+  p2,
+
+#  align = 'vh',
+  labels = c("A", "B"),
+  hjust = -1,
+  nrow = 2,
+  ncol=1
+)
+
+# add the legend to the row we made earlier. Give it one-third of 
+# the width of one plot (via rel_widths).
+#plot_grid(prow, rel_widths = c(4, .5))
+
+pdf('Methods_vgt1_Fig.pdf',width=150,height=100)
+print(plot_grid(prow, rel_widths = c(4, .5)))
+dev.off()
+
+```

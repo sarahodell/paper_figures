@@ -1,0 +1,100 @@
+---
+title: "biogemma color scheme"
+author: "Sarah Odell"
+date: "3/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library('data.table')
+library('ggplot2')
+library('plotrix')
+```
+
+Start with red for first founder
+```{r}
+founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra", "A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
+
+random_color<-function(){
+  red=runif(1)
+  green=runif(1)
+  blue=runif(1)
+  start=rgb(red,green,blue)
+  return(start)
+}
+
+
+start="#85C7D3"
+hex_colors=c(start)
+for(i in 1:15){
+  hex_colors=c(hex_colors,random_color())
+}
+
+adjust_hex_colors<-function(x,hex_list){
+  new_hex_list=hex_list
+  for(i in 1:length(x)){
+    new_hex_list[x[i]]=random_color()
+  }
+  return(new_hex_list)
+}
+```
+
+
+
+```{r}
+test=data.frame(founder=founders,value=5,founder_f=factor(founders,levels=founders))
+
+ggplot(test,aes(x=value,color=founder_f,fill=founder_f)) + geom_bar() + scale_colour_manual(values=hex_colors) + scale_fill_manual(values=hex_colors) + guides(color=F)
+
+```
+
+
+```{r}
+adjust1=adjust_hex_colors(c(3,7,11,13,15),hex_colors)
+
+ggplot(test,aes(x=value,color=founder,fill=founder)) + geom_bar() + scale_colour_manual(values=adjust1) + scale_fill_manual(values=adjust1) + guides(color=F)
+```
+
+
+
+```{r}
+adjust2=adjust_hex_colors(c(3,13),adjust1)
+
+ggplot(test,aes(x=value,color=founder,fill=founder)) + geom_bar() + scale_colour_manual(values=adjust2) + scale_fill_manual(values=adjust2) + guides(color=F)
+
+```
+
+
+```{r}
+adjust3=adjust_hex_colors(c(3),adjust2)
+
+ggplot(test,aes(x=value,color=founder,fill=founder)) + geom_bar() + scale_colour_manual(values=adjust3) + scale_fill_manual(values=adjust3) + guides(color=F)
+
+```
+
+
+
+```{r}
+adjust4=adjust_hex_colors(c(13),adjust3)
+
+ggplot(test,aes(x=value,color=founder_f,fill=founder_f)) + geom_bar() + scale_colour_manual(values=adjust4) + scale_fill_manual(values=adjust4) + guides(color=F)
+
+```
+
+
+```{r}
+final_hex=adjust4
+
+final_hex
+
+test$hex_color=final_hex
+test=test[,c('founder','hex_color')]
+fwrite(test,'founder_color_codes.txt',row.names=F,quote=F,sep='\t')
+```
+
+

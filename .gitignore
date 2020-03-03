@@ -1,0 +1,8 @@
+*.R~
+*.py~
+*.Rmd~
+*.txt
+*.rds
+*.RData
+*.DS_Store
+.gitignore~
