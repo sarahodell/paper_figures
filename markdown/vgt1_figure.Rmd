@@ -243,7 +243,7 @@ prow <- plot_grid(
 # the width of one plot (via rel_widths).
 #plot_grid(prow, rel_widths = c(4, .5))
 
-pdf('Methods_vgt1_Fig.pdf',width=150,height=100)
+pdf('../images/Methods_vgt1_Fig.pdf',width=150,height=100)
 print(plot_grid(prow, rel_widths = c(4, .5)))
 dev.off()
 

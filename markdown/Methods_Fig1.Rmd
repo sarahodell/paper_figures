@@ -26,24 +26,24 @@ library('tibble')
 #color schemes
 #colors=c('red','grey','lightblue','yellow','blue','darkred','darkgrey','black','orange','purple','lightgreen','pink','darkgreen','darkblue','green','brown')
 
-colorcodes=fread('founder_color_codes.txt',data.table=F)
+colorcodes=fread('../data/founder_color_codes.txt',data.table=F)
 
 founders=c("A632_usa","B73_inra","CO255_inra","FV252_inra","OH43_inra","A654_inra","FV2_inra","C103_inra","EP1_inra","D105_inra","W117_inra","B96","DK63","F492","ND245","VA85")
 
 # Chromosome eight maps
-gmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c8.csv',data.table=F)
-pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
+gmap=fread('../../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c8.csv',data.table=F)
+pmap=fread('../../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c8.csv',data.table=F)
 ```
 1A
 ```{r}
-a<-ggdraw() + draw_image('Fig1A_crossing_scheme_real.png')
+a<-ggdraw() + draw_image('../images/Fig1A_crossing_scheme_real.png')
 a
 ```
 
 1B
 ```{r}
 
-pr8=readRDS('../GridLMM_011619/bg8_filtered_genotype_probs.rds')#qtl2/Biogemma_071118/bg10_genoprobs_010319.rds')
+pr8=readRDS('../../GridLMM_011619/bg8_filtered_genotype_probs.rds')#qtl2/Biogemma_071118/bg10_genoprobs_010319.rds')
 eight=lapply(pr8, function(x) x[240:249,])
 
 samples=dimnames(eight[[1]])[[1]]
@@ -118,9 +118,9 @@ c
 1D
 ```{r}
 
-ibd_segments=fread('bg10_ibd_blocks_fixed.txt',data.table=F)
-gmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c10.csv',data.table=F)
-pmap=fread('../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c10.csv',data.table=F)
+ibd_segments=fread('../data/bg10_ibd_blocks_fixed.txt',data.table=F)
+gmap=fread('../../qtl2/Biogemma_071118/startfiles/Biogemma_gmap_c10.csv',data.table=F)
+pmap=fread('../../qtl2/Biogemma_071118/startfiles/Biogemma_pmap_c10.csv',data.table=F)
 
 pmap$pos=round(pmap$pos)
 #pmap$pos=pmap$pos*1e6
